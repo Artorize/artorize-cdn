@@ -6,8 +6,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "build:test": "tsc src/test.ts --outDir dist --module ES2015 --target ES2016 --lib ES2016,DOM",
-    "build:all": "npm run build && npm run build:test",
+    "build:test": "tsc src/test.ts --outDir dist --module ES2015 --target ES2016 --lib ES2016,DOM --skipLibCheck",
+    "build:embed": "tsc src/embed.ts --outDir dist --module none --target ES2016 --lib ES2016,DOM --skipLibCheck",
+    "build:all": "npm run build && npm run build:test && npm run build:embed",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "NODE_OPTIONS='--experimental-vm-modules' jest --testPathPattern=tests/unit",
     "test:integration": "NODE_OPTIONS='--experimental-vm-modules' jest --testPathPattern=tests/integration",

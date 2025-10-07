@@ -167,31 +167,31 @@ function renderMask(
     const normalizedMag = Math.min(255, mag / 4); // Scale for visibility
 
     const j = i * 4;
-    let r = 255, g = 255, b = 255;
+    let r = 255, g = 255, blue = 255;
 
     switch (colorMode) {
       case 'red':
-        r = 255; g = 0; b = 0;
+        r = 255; g = 0; blue = 0;
         break;
       case 'green':
-        r = 0; g = 255; b = 0;
+        r = 0; g = 255; blue = 0;
         break;
       case 'blue':
-        r = 0; g = 0; b = 255;
+        r = 0; g = 0; blue = 255;
         break;
       case 'rainbow':
         const hue = (normalizedMag / 255) * 360;
-        [r, g, b] = hslToRgb(hue, 100, 50);
+        [r, g, blue] = hslToRgb(hue, 100, 50);
         break;
       case 'white':
       default:
-        r = 255; g = 255; b = 255;
+        r = 255; g = 255; blue = 255;
         break;
     }
 
     imgData.data[j + 0] = r;
     imgData.data[j + 1] = g;
-    imgData.data[j + 2] = b;
+    imgData.data[j + 2] = blue;
     imgData.data[j + 3] = normalizedMag * (opacity / 100);
   }
 
