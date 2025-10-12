@@ -84,7 +84,7 @@ NODE_ENV=production npm run serve
 ### Test Endpoints
 
 - **Main page**: http://localhost:3000/
-- **Test page**: http://localhost:3000/test.html
+- **Test page**: http://localhost:3000/examples/test.html
 - **Health check**: http://localhost:3000/health
 - **API (list images)**: http://localhost:3000/api/images
 
@@ -176,11 +176,11 @@ tar -czf deploy.tar.gz \
   dist/ \
   server/ \
   test_data/ \
+  examples/ \
+  config/ \
+  scripts/ \
   package.json \
   package-lock.json \
-  ecosystem.config.js \
-  index.html \
-  test.html \
   README.md
 ```
 
@@ -204,7 +204,7 @@ tar -xzf deploy.tar.gz
 npm ci --production  # Install production dependencies only
 
 # Start with PM2
-pm2 start ecosystem.config.js --env production
+pm2 start config/ecosystem.config.js --env production
 pm2 save
 pm2 startup  # Follow the instructions to setup auto-start
 ```
@@ -271,7 +271,7 @@ npm ci --production
 npm run build:all
 
 # Start/restart
-pm2 restart ecosystem.config.js --env production || pm2 start ecosystem.config.js --env production
+pm2 restart ecosystem.config.js --env production || pm2 start config/ecosystem.config.js --env production
 pm2 save
 ```
 
@@ -299,7 +299,7 @@ pm2 monit
 
 ```bash
 # Copy nginx configuration
-sudo cp /var/www/artorize-cdn/nginx.conf /etc/nginx/sites-available/artorize-cdn
+sudo cp /var/www/artorize-cdn/config/nginx.conf /etc/nginx/sites-available/artorize-cdn
 
 # Edit with your domain
 sudo nano /etc/nginx/sites-available/artorize-cdn
@@ -410,7 +410,7 @@ sudo lsof -i :3000
 # Kill process
 sudo kill -9 <PID>
 
-# Or change port in ecosystem.config.js
+# Or change port in config/ecosystem.config.js
 ```
 
 ### Permission Denied
@@ -493,7 +493,7 @@ For deploying to your friend's server:
 - [ ] Copied archive to server: `scp deploy.tar.gz user@server:/var/www/artorize-cdn/`
 - [ ] Extracted on server: `tar -xzf deploy.tar.gz`
 - [ ] Installed dependencies: `npm ci --production`
-- [ ] Started with PM2: `pm2 start ecosystem.config.js --env production`
+- [ ] Started with PM2: `pm2 start config/ecosystem.config.js --env production`
 - [ ] Saved PM2 config: `pm2 save`
 - [ ] Setup auto-start: `pm2 startup`
 - [ ] Verified deployment: `curl http://localhost:3000/health`

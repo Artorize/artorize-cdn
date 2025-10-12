@@ -29,7 +29,7 @@ You have two options:
 pip install numpy pillow
 
 # Generate test images and SAC files
-python generate_test_sac.py
+python scripts/generate_test_sac.py
 ```
 
 This creates `test_data/` with:
@@ -70,7 +70,7 @@ You should see:
 
 ### Test the Interactive Demo
 
-Open: **http://localhost:3000/test.html**
+Open: **http://localhost:3000/examples/test.html**
 
 **Option 1: Use Built-in Sample (Easiest)**
 1. Click "Load Sample Test Data"
@@ -129,6 +129,8 @@ Use the Python script as a template:
 
 ```python
 import numpy as np
+import sys
+sys.path.append('scripts')
 from generate_test_sac import build_sac
 
 # Load your image to get dimensions
@@ -175,7 +177,7 @@ console.log('Height:', dv.getUint32(20, true));
 
 ### Scenario 2: Test Different Image Sizes
 
-Modify `generate_test_sac.py`:
+Modify `scripts/generate_test_sac.py`:
 ```python
 # Change these values
 width = 1920
@@ -184,7 +186,7 @@ height = 1080
 
 Run again:
 ```bash
-python generate_test_sac.py
+python scripts/generate_test_sac.py
 ```
 
 ### Scenario 3: Test Performance
@@ -268,7 +270,7 @@ npm install
 npm test
 
 # Generate test data
-python generate_test_sac.py
+python scripts/generate_test_sac.py
 
 # Build project
 npm run build:all
@@ -277,7 +279,7 @@ npm run build:all
 npm run serve
 
 # Open test page
-open http://localhost:3000/test.html
+open http://localhost:3000/examples/test.html
 
 # Stop server
 Ctrl + C

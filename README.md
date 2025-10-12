@@ -16,11 +16,29 @@ This system protects artwork by serving a "polluted" version of the image to AI 
 artorize-cdn/
 ├── src/
 │   ├── index.ts          # Main SAC parser and mask renderer
-│   └── test.ts           # Interactive test suite
-├── index.html            # Production page template
-├── test.html             # Test page with controls
-├── generate_test_sac.py  # Python script to create test SAC files
-└── sac_v_1_cdn_mask_transfer_protocol.md  # Protocol specification
+│   ├── test.ts           # Interactive test suite
+│   └── embed.ts          # Multi-image embed script
+├── examples/
+│   ├── index.html        # Single-image example
+│   ├── test.html         # Test page with controls
+│   └── embed.html        # Multi-image embed example
+├── docs/
+│   ├── CLIENT_INTEGRATION.md         # Client-side integration guide
+│   ├── DEPLOYMENT.md                 # Deployment guide
+│   ├── LOCAL_TESTING.md              # Local testing guide
+│   ├── QUICKSTART.md                 # Quick start guide
+│   ├── CLAUDE.md                     # Project guidance for Claude Code
+│   └── sac_v_1_cdn_mask_transfer_protocol.md  # Protocol spec
+├── config/
+│   ├── ecosystem.config.js           # PM2 configuration
+│   └── nginx.conf                    # Nginx configuration
+├── scripts/
+│   └── generate_test_sac.py          # Python script to create test SAC files
+├── server/
+│   └── index.js          # Local Express dev server
+└── tests/
+    ├── unit/             # Unit tests
+    └── integration/      # Integration tests
 ```
 
 ## Quick Start
@@ -43,7 +61,7 @@ This compiles both the main code and the test suite.
 pip install numpy pillow
 
 # Generate test data
-python generate_test_sac.py
+python scripts/generate_test_sac.py
 ```
 
 This creates `test_data/` with:
@@ -54,13 +72,16 @@ This creates `test_data/` with:
 
 **Option B: Use built-in sample generator**
 
-Simply open `test.html` and click "Load Sample Test Data" - no external files needed!
+Simply open `examples/test.html` and click "Load Sample Test Data" - no external files needed!
 
 ### 3. Open the Test Page
 
 ```bash
-# Open test.html in your browser
-open test.html
+# Start the development server
+npm run serve
+
+# Open test page in your browser
+# Navigate to http://localhost:3000/examples/test.html
 ```
 
 The test page provides:
@@ -90,9 +111,11 @@ Header layout (little-endian):
 - Bytes 20-23: Height (uint32, optional)
 ```
 
-See [sac_v_1_cdn_mask_transfer_protocol.md](sac_v_1_cdn_mask_transfer_protocol.md) for complete specification.
+See [sac_v_1_cdn_mask_transfer_protocol.md](docs/sac_v_1_cdn_mask_transfer_protocol.md) for complete specification.
 
-## Usage Example
+## Usage Examples
+
+For complete client-side integration documentation, see [docs/CLIENT_INTEGRATION.md](docs/CLIENT_INTEGRATION.md).
 
 ### Client-Side Integration
 
@@ -152,7 +175,7 @@ upload_to_cdn(f'{image_id}.jpg.sac', sac_bytes)
 
 ## Test Page Features
 
-The `test.html` page includes:
+The `examples/test.html` page includes:
 
 ### Visualization Modes
 - **White Overlay**: Standard white mask with alpha
@@ -256,8 +279,15 @@ npm test
 
 Private project for Artorize AI art protection system.
 
+## Documentation
+
+- **[Client Integration Guide](docs/CLIENT_INTEGRATION.md)** - Complete guide for integrating Artorize protection into your website
+- **[Quick Start](docs/QUICKSTART.md)** - Get up and running in 5 minutes
+- **[Local Testing](docs/LOCAL_TESTING.md)** - Test the system on your local machine
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Deploy to production servers
+- **[SAC v1 Protocol Specification](docs/sac_v_1_cdn_mask_transfer_protocol.md)** - Binary format documentation
+
 ## Further Reading
 
-- [SAC v1 Protocol Specification](sac_v_1_cdn_mask_transfer_protocol.md)
 - MDN: [TypedArray](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray)
 - MDN: [Canvas API](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API)

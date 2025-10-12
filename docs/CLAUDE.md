@@ -120,6 +120,25 @@ tests/
 
 server/
 └── index.js       # Local Express dev server (serves static files)
+
+examples/
+├── index.html     # Single-image example
+├── test.html      # Interactive test page
+└── embed.html     # Multi-image embed example
+
+docs/
+├── CLIENT_INTEGRATION.md         # Client-side integration guide
+├── DEPLOYMENT.md                 # Deployment guide
+├── LOCAL_TESTING.md              # Local testing guide
+├── QUICKSTART.md                 # Quick start guide
+└── sac_v_1_cdn_mask_transfer_protocol.md  # Protocol spec
+
+config/
+├── ecosystem.config.js           # PM2 configuration
+└── nginx.conf                    # Nginx configuration
+
+scripts/
+└── generate_test_sac.py          # Generate test SAC files
 ```
 
 ## CDN URL Convention
@@ -135,13 +154,13 @@ The `.sac` extension is **appended** to the full image filename (including `.jpg
 **Local testing with Python-generated test files:**
 ```bash
 # Generate test data (requires numpy)
-python generate_test_sac.py
+python scripts/generate_test_sac.py
 
 # Start local server
 npm run serve:dev
 
 # Open test page
-# Navigate to http://localhost:3000/test.html
+# Navigate to http://localhost:3000/examples/test.html
 ```
 
 **Local testing without Python:**
@@ -160,7 +179,8 @@ npm run build:test
 
 ## File References
 
-- SAC v1 Protocol: `sac_v_1_cdn_mask_transfer_protocol.md`
-- Deployment guide: `DEPLOYMENT.md`
-- Local testing: `LOCAL_TESTING.md`
-- Quick start: `QUICKSTART.md`
+- Client integration: `docs/CLIENT_INTEGRATION.md`
+- SAC v1 Protocol: `docs/sac_v_1_cdn_mask_transfer_protocol.md`
+- Deployment guide: `docs/DEPLOYMENT.md`
+- Local testing: `docs/LOCAL_TESTING.md`
+- Quick start: `docs/QUICKSTART.md`

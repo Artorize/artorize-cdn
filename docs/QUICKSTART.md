@@ -26,7 +26,7 @@ npm run build:all
 **Option A: Use Python (Recommended)**
 ```bash
 pip install numpy pillow
-python generate_test_sac.py
+python scripts/generate_test_sac.py
 ```
 
 **Option B: Skip this** - The test page has built-in sample data!
@@ -45,7 +45,7 @@ You'll see:
 
 ## Step 6: Open Your Browser
 
-Go to: **http://localhost:3000/test.html**
+Go to: **http://localhost:3000/examples/test.html**
 
 Click the big button: **"Load Sample Test Data"**
 
@@ -125,7 +125,7 @@ npm run build:all
 
 # Every time you want to test
 npm run serve
-# Then open http://localhost:3000/test.html
+# Then open http://localhost:3000/examples/test.html
 
 # Stop server
 Ctrl + C
