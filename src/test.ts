@@ -14,7 +14,12 @@ interface SACData {
 type ColorMode = 'white' | 'red' | 'green' | 'blue' | 'rainbow';
 
 /**
- * Parses a SAC v1 binary buffer into typed arrays
+ * Parses a SAC v1/v1.1 binary buffer into typed arrays
+ *
+ * SAC v1.1 adds FLAG_SINGLE_ARRAY (0x01) for grayscale masks:
+ * - When set, only array A is stored in payload (50% smaller files)
+ * - Array B is duplicated from A during parsing
+ * - Grayscale diff is broadcast to all RGB channels during reconstruction
  */
 function parseSAC(buffer: ArrayBuffer): SACData {
   const dv = new DataView(buffer);
@@ -27,37 +32,65 @@ function parseSAC(buffer: ArrayBuffer): SACData {
   const dtype = dv.getUint8(5);
   const arraysCount = dv.getUint8(6);
 
-  if (dtype !== 1 || arraysCount !== 2) throw new Error('Unsupported SAC variant');
+  if (dtype !== 1) throw new Error('Unsupported data type');
 
   const lengthA = dv.getUint32(8, true);
   const lengthB = dv.getUint32(12, true);
   const width = dv.getUint32(16, true);
   const height = dv.getUint32(20, true);
 
+  // SAC v1.1: FLAG_SINGLE_ARRAY (bit 0) indicates B = A (grayscale mask)
+  const FLAG_SINGLE_ARRAY = 0x01;
+  const isSingleArray = (flags & FLAG_SINGLE_ARRAY) !== 0;
+
+  // Calculate offsets and validate file size
   const offA = 24;
-  const offB = offA + lengthA * 2;
+  let a: Int16Array;
+  let b: Int16Array;
 
-  if (offB + lengthB * 2 !== buffer.byteLength) throw new Error('Length mismatch');
+  if (isSingleArray) {
+    // v1.1 single-array mode: only A is stored, B is duplicated from A
+    if (arraysCount !== 1) throw new Error('arraysCount must be 1 for SINGLE_ARRAY mode');
+    const expectedSize = 24 + lengthA * 2;
+    if (buffer.byteLength !== expectedSize) throw new Error('Length mismatch');
 
-  const a = new Int16Array(buffer, offA, lengthA);
-  const b = new Int16Array(buffer, offB, lengthB);
+    // Create array A and duplicate as B (zero-copy reference)
+    a = new Int16Array(buffer, offA, lengthA);
+    b = a; // B references same data as A (50% memory savings)
+  } else {
+    // v1.0 dual-array mode: both A and B are stored
+    if (arraysCount !== 2) throw new Error('arraysCount must be 2 for dual-array mode');
+    const offB = offA + lengthA * 2;
+    const expectedSize = offB + lengthB * 2;
+    if (buffer.byteLength !== expectedSize) throw new Error('Length mismatch');
 
-  if (width && height && (lengthA !== width * height || lengthB !== width * height)) {
-    throw new Error('Shape mismatch');
+    a = new Int16Array(buffer, offA, lengthA);
+    b = new Int16Array(buffer, offB, lengthB);
+  }
+
+  // Validate shape if provided
+  if (width && height) {
+    if (lengthA !== width * height) throw new Error('Shape mismatch for array A');
+    if (!isSingleArray && lengthB !== width * height) throw new Error('Shape mismatch for array B');
   }
 
   return { a, b, width, height, flags };
 }
 
 /**
- * Builds a SAC v1 file from two int16 arrays (for testing)
+ * Builds a SAC v1/v1.1 file from int16 arrays (for testing)
+ *
+ * @param a - First int16 array (grayscale diff for v1.1)
+ * @param b - Second int16 array (ignored if singleArray=true)
+ * @param width - Image width
+ * @param height - Image height
+ * @param singleArray - Use v1.1 SINGLE_ARRAY mode (50% smaller, for grayscale masks)
  */
-function buildSAC(a: Int16Array, b: Int16Array, width: number, height: number): ArrayBuffer {
+function buildSAC(a: Int16Array, b: Int16Array, width: number, height: number, singleArray: boolean = true): ArrayBuffer {
   const lengthA = a.length;
-  const lengthB = b.length;
 
-  if (lengthA !== width * height || lengthB !== width * height) {
-    throw new Error('Array lengths must equal width * height');
+  if (lengthA !== width * height) {
+    throw new Error('Array A length must equal width * height');
   }
 
   const header = new ArrayBuffer(24);
@@ -69,23 +102,51 @@ function buildSAC(a: Int16Array, b: Int16Array, width: number, height: number): 
   dv.setUint8(2, 'C'.charCodeAt(0));
   dv.setUint8(3, '1'.charCodeAt(0));
 
-  dv.setUint8(4, 0);  // flags
-  dv.setUint8(5, 1);  // dtype_code = int16
-  dv.setUint8(6, 2);  // arrays_count
-  dv.setUint8(7, 0);  // reserved
+  if (singleArray) {
+    // SAC v1.1: SINGLE_ARRAY mode (grayscale masks)
+    const FLAG_SINGLE_ARRAY = 0x01;
+    dv.setUint8(4, FLAG_SINGLE_ARRAY);  // flags
+    dv.setUint8(5, 1);  // dtype_code = int16
+    dv.setUint8(6, 1);  // arrays_count = 1
+    dv.setUint8(7, 0);  // reserved
 
-  dv.setUint32(8, lengthA, true);
-  dv.setUint32(12, lengthB, true);
-  dv.setUint32(16, width, true);
-  dv.setUint32(20, height, true);
+    dv.setUint32(8, lengthA, true);
+    dv.setUint32(12, lengthA, true);  // lengthB = lengthA (for header consistency)
+    dv.setUint32(16, width, true);
+    dv.setUint32(20, height, true);
 
-  // Combine header + payloads
-  const total = new Uint8Array(24 + lengthA * 2 + lengthB * 2);
-  total.set(new Uint8Array(header), 0);
-  total.set(new Uint8Array(a.buffer), 24);
-  total.set(new Uint8Array(b.buffer), 24 + lengthA * 2);
+    // Combine header + single array payload (50% smaller!)
+    const total = new Uint8Array(24 + lengthA * 2);
+    total.set(new Uint8Array(header), 0);
+    total.set(new Uint8Array(a.buffer), 24);
 
-  return total.buffer;
+    return total.buffer;
+  } else {
+    // SAC v1.0: dual-array mode (legacy RGB masks)
+    const lengthB = b.length;
+
+    if (lengthB !== width * height) {
+      throw new Error('Array B length must equal width * height');
+    }
+
+    dv.setUint8(4, 0);  // flags = 0
+    dv.setUint8(5, 1);  // dtype_code = int16
+    dv.setUint8(6, 2);  // arrays_count = 2
+    dv.setUint8(7, 0);  // reserved
+
+    dv.setUint32(8, lengthA, true);
+    dv.setUint32(12, lengthB, true);
+    dv.setUint32(16, width, true);
+    dv.setUint32(20, height, true);
+
+    // Combine header + both array payloads
+    const total = new Uint8Array(24 + lengthA * 2 + lengthB * 2);
+    total.set(new Uint8Array(header), 0);
+    total.set(new Uint8Array(a.buffer), 24);
+    total.set(new Uint8Array(b.buffer), 24 + lengthA * 2);
+
+    return total.buffer;
+  }
 }
 
 /**
@@ -146,6 +207,7 @@ function generateTestMask(width: number, height: number): { a: Int16Array; b: In
 
 /**
  * Render mask on canvas with configurable visualization
+ * - Optimized fast path for grayscale masks (SAC v1.1) where a === b
  */
 function renderMask(
   canvas: HTMLCanvasElement,
@@ -160,11 +222,23 @@ function renderMask(
   const ctx = canvas.getContext('2d')!;
   const imgData = ctx.createImageData(width, height);
 
+  // SAC v1.1 grayscale optimization: when a === b, use fast path
+  const isGrayscale = a === b;
+
   for (let i = 0; i < a.length; i++) {
-    const ax = a[i];
-    const by = b[i];
-    const mag = Math.hypot(ax, by);
-    const normalizedMag = Math.min(255, mag / 4); // Scale for visibility
+    let normalizedMag: number;
+
+    if (isGrayscale) {
+      // Fast path: grayscale masks (no sqrt needed)
+      const val = Math.abs(a[i]);
+      normalizedMag = Math.min(255, val / 4); // Scale for visibility
+    } else {
+      // Legacy path: RGB masks with magnitude calculation
+      const ax = a[i];
+      const by = b[i];
+      const mag = Math.hypot(ax, by);
+      normalizedMag = Math.min(255, mag / 4); // Scale for visibility
+    }
 
     const j = i * 4;
     let r = 255, g = 255, blue = 255;
