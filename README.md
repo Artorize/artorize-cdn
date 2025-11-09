@@ -1,14 +1,33 @@
 # Artorize CDN - AI Art Protection System
 
-A CDN delivery system for protecting artwork from AI scrapers using the SAC v1 (Simple Array Container) mask transmission protocol.
+A CDN delivery system for protecting artwork from AI scrapers using the SAC v1.1 (Simple Array Container) mask transmission protocol.
 
 ## Overview
 
 This system protects artwork by serving a "polluted" version of the image to AI scrapers while maintaining the ability to reconstruct the original quality for legitimate viewers. The protection works by:
 
-1. **Polluted Image**: A degraded version of the artwork stored on the CDN
-2. **Mask Data**: Two int16 arrays (A and B) containing the reconstruction information
-3. **Client-Side Reconstruction**: JavaScript code that fetches the mask and applies it to reveal the original quality
+1. **Backend Storage**: Secure MongoDB GridFS storage for originals, protected images, and masks
+2. **CDN Proxy**: High-performance caching layer that proxies requests to the backend
+3. **Polluted Image**: A degraded version of the artwork served to clients
+4. **Mask Data**: Grayscale mask in SAC v1.1 format containing reconstruction information
+5. **Client-Side Reconstruction**: JavaScript code that fetches the mask and applies it to reveal the original quality
+
+## Architecture
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
+│   Client    │────▶│  CDN Server  │────▶│ Backend API     │
+│  Browser    │◀────│  (Port 3000) │◀────│ (Port 3002)     │
+└─────────────┘     └──────────────┘     └─────────────────┘
+                           ↓                      ↓
+                    (Caches files)        (MongoDB GridFS)
+```
+
+**Features**:
+- **Backend Integration**: Fetches artwork from secure backend storage
+- **Caching**: Aggressive caching with immutable headers for optimal performance
+- **SAC v1.1 Protocol**: 50% smaller mask files with single-array grayscale mode
+- **Backward Compatible**: Still supports filesystem-based test data
 
 ## Project Structure
 
@@ -35,7 +54,8 @@ artorize-cdn/
 ├── scripts/
 │   └── generate_test_sac.py          # Python script to create test SAC files
 ├── server/
-│   └── index.js          # Local Express dev server
+│   ├── index.js          # CDN server (proxies to backend)
+│   └── backend-client.js # Backend API client
 └── tests/
     ├── unit/             # Unit tests
     └── integration/      # Integration tests
@@ -43,7 +63,19 @@ artorize-cdn/
 
 ## Quick Start
 
-### 1. Build the Project
+### 1. Configure Backend Connection
+
+Create a `.env` file with your backend URL:
+
+```bash
+cp .env.example .env
+# Edit .env and set:
+# BACKEND_API_URL=http://localhost:3002
+```
+
+**Default**: `http://localhost:3002`
+
+### 2. Build the Project
 
 ```bash
 npm install
@@ -74,14 +106,31 @@ This creates `test_data/` with:
 
 Simply open `examples/test.html` and click "Load Sample Test Data" - no external files needed!
 
-### 3. Open the Test Page
+### 3. Start the CDN Server
 
 ```bash
-# Start the development server
+# Start the CDN server (proxies to backend)
 npm run serve
 
-# Open test page in your browser
+# Server runs on http://localhost:3000
+# Backend should be running on http://localhost:3002
+```
+
+### 4. Test the Integration
+
+**Option A: Test with backend artwork**
+```bash
+# Fetch artwork via CDN
+curl http://localhost:3000/api/artworks/{ARTWORK_ID}
+
+# Fetch mask via CDN
+curl http://localhost:3000/api/artworks/{ARTWORK_ID}/mask
+```
+
+**Option B: Test with local files**
+```bash
 # Navigate to http://localhost:3000/examples/test.html
+# Use built-in sample data generator (no backend required)
 ```
 
 The test page provides:
@@ -279,13 +328,26 @@ npm test
 
 Private project for Artorize AI art protection system.
 
+## API Endpoints
+
+The CDN provides these endpoints that proxy to the backend:
+
+- `GET /api/artworks/:id` - Fetch artwork file (protected/original variant)
+- `GET /api/artworks/:id/mask` - Fetch mask file (SAC v1.1 format)
+- `GET /api/artworks/:id/metadata` - Fetch artwork metadata
+- `GET /api/artworks` - Search artworks with query parameters
+- `GET /health` - Health check (includes backend status)
+
+See [Backend API Documentation](docs/BACKEND_API.md) for complete reference.
+
 ## Documentation
 
+- **[Backend API Reference](docs/BACKEND_API.md)** - Complete backend integration and API documentation
 - **[Client Integration Guide](docs/CLIENT_INTEGRATION.md)** - Complete guide for integrating Artorize protection into your website
 - **[Quick Start](docs/QUICKSTART.md)** - Get up and running in 5 minutes
 - **[Local Testing](docs/LOCAL_TESTING.md)** - Test the system on your local machine
 - **[Deployment Guide](docs/DEPLOYMENT.md)** - Deploy to production servers
-- **[SAC v1 Protocol Specification](docs/sac_v_1_cdn_mask_transfer_protocol.md)** - Binary format documentation
+- **[SAC v1.1 Protocol Specification](docs/poison-mask-grayscale-protocol.md)** - Binary format documentation
 
 ## Further Reading
 

@@ -9,6 +9,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import * as backendClient from './backend-client.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,14 +67,138 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
+// Health check endpoint (includes backend health)
+app.get('/health', async (req, res) => {
+  const health = {
     status: 'ok',
     env: ENV,
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-  });
+    backend: {
+      url: process.env.BACKEND_API_URL || 'http://localhost:3002',
+      status: 'unknown',
+    },
+  };
+
+  // Check backend health
+  try {
+    const backendHealth = await backendClient.checkBackendHealth();
+    health.backend.status = 'ok';
+    health.backend.details = backendHealth;
+  } catch (error) {
+    health.backend.status = 'error';
+    health.backend.error = error.message;
+  }
+
+  res.json(health);
+});
+
+// Backend API routes for artwork retrieval
+// These routes proxy requests to the backend storage service
+
+// Fetch artwork file (original or protected variant)
+app.get('/api/artworks/:id', async (req, res, next) => {
+  const { id } = req.params;
+  const variant = req.query.variant || 'protected'; // Default to protected variant for CDN
+
+  try {
+    const { buffer, contentType, size } = await backendClient.fetchArtworkFile(id, variant);
+
+    res.set({
+      'Content-Type': contentType,
+      'Content-Length': size,
+      'Cache-Control': `public, max-age=${currentConfig.cacheMaxAge}, immutable`,
+      'X-Content-Type-Options': 'nosniff',
+    });
+
+    res.send(buffer);
+  } catch (error) {
+    console.error(`Error fetching artwork ${id} (variant: ${variant}):`, error.message);
+
+    if (error.message.includes('404')) {
+      return res.status(404).json({
+        error: 'Artwork not found',
+        message: `Artwork ${id} or variant ${variant} not found`,
+      });
+    }
+
+    next(error);
+  }
+});
+
+// Fetch artwork mask file (SAC format)
+app.get('/api/artworks/:id/mask', async (req, res, next) => {
+  const { id } = req.params;
+
+  try {
+    const { buffer, contentType, size } = await backendClient.fetchArtworkMask(id);
+
+    res.set({
+      'Content-Type': contentType,
+      'Content-Length': size,
+      'Cache-Control': `public, max-age=${currentConfig.cacheMaxAge}, immutable`,
+      'Content-Disposition': `inline; filename="${id}-mask.sac"`,
+      'X-Content-Type-Options': 'nosniff',
+    });
+
+    res.send(buffer);
+  } catch (error) {
+    console.error(`Error fetching mask for artwork ${id}:`, error.message);
+
+    if (error.message.includes('404')) {
+      return res.status(404).json({
+        error: 'Mask not found',
+        message: `Mask for artwork ${id} not found`,
+      });
+    }
+
+    next(error);
+  }
+});
+
+// Fetch artwork metadata
+app.get('/api/artworks/:id/metadata', async (req, res, next) => {
+  const { id } = req.params;
+
+  try {
+    const metadata = await backendClient.fetchArtworkMetadata(id);
+
+    res.set({
+      'Content-Type': 'application/json',
+      'Cache-Control': `public, max-age=${Math.min(currentConfig.cacheMaxAge, 3600)}`, // Cache metadata for max 1 hour
+    });
+
+    res.json(metadata);
+  } catch (error) {
+    console.error(`Error fetching metadata for artwork ${id}:`, error.message);
+
+    if (error.message.includes('404')) {
+      return res.status(404).json({
+        error: 'Artwork not found',
+        message: `Artwork ${id} not found`,
+      });
+    }
+
+    next(error);
+  }
+});
+
+// Search artworks (with query parameters)
+app.get('/api/artworks', async (req, res, next) => {
+  try {
+    // Forward query parameters to backend
+    const artworks = await backendClient.searchArtworks(req.query);
+
+    res.set({
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=300', // Cache search results for 5 minutes
+    });
+
+    res.json(artworks);
+  } catch (error) {
+    console.error('Error searching artworks:', error.message);
+    next(error);
+  }
 });
 
 // Serve static files (HTML, CSS, JS)
