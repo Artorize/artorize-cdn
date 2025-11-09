@@ -16,6 +16,8 @@
     "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage",
     "serve": "node server/index.js",
     "serve:dev": "node --watch server/index.js",
+    "version": "node scripts/version.js",
+    "update": "node -e \"import('./server/self-update.js').then(m => m.performSelfUpdate().then(r => console.log(JSON.stringify(r, null, 2))))\"",
     "deploy:build": "npm run build:all && npm run test",
     "deploy:staging": "npm run deploy:build && node scripts/deploy.js staging",
     "deploy:production": "npm run deploy:build && node scripts/deploy.js production"

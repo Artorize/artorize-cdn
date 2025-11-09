@@ -299,7 +299,83 @@ npm run build:all
 
 # Run test (builds and shows instructions)
 npm test
+
+# Check version and last update time
+npm run version
+
+# Manually trigger update
+npm run update
 ```
+
+## Self-Update System
+
+The CDN server includes automatic self-update functionality that runs on each launch:
+
+### Features
+
+- **Automatic Updates**: Checks for new commits and pulls changes on server startup
+- **Version Tracking**: Records last update time, current commit, and branch information
+- **Version Command**: Display current version and git information
+- **Manual Updates**: Trigger updates via CLI or API endpoint
+
+### Version Command
+
+Check the current version, commit, and last update time:
+
+```bash
+npm run version
+```
+
+Output:
+```
+=== Artorize CDN Version Info ===
+
+  Name: artorize-cdn
+  Version: 1.0.0
+  Git Commit: cb3eee3dc6e9d2567f080f5de87d3dc00fd3185a
+  Git Commit (short): cb3eee3
+  Git Branch: main
+  Last Update: 11/9/2025, 10:30:45 AM (2 hours ago)
+```
+
+### API Endpoints
+
+The server provides version and update endpoints:
+
+```bash
+# Get version information
+curl http://localhost:3000/version
+
+# Trigger manual update (POST request)
+curl -X POST http://localhost:3000/api/update
+```
+
+### Disabling Auto-Update
+
+To disable automatic updates on server startup:
+
+```bash
+SKIP_AUTO_UPDATE=true npm run serve
+```
+
+Or add to your `.env` file:
+```bash
+SKIP_AUTO_UPDATE=true
+```
+
+### How It Works
+
+1. **On Server Start**: Checks git for new commits
+2. **If Updates Found**: Pulls latest changes and rebuilds
+3. **Update Version File**: Records timestamp and commit hash in `version.json`
+4. **Continue Startup**: Server starts normally with updated code
+
+The self-update system uses git operations and will:
+- Fetch from remote repository
+- Compare local and remote commits
+- Pull updates if available
+- Rebuild TypeScript files
+- Update version tracking file
 
 ## Browser Compatibility
 

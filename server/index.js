@@ -10,6 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import * as backendClient from './backend-client.js';
+import { performSelfUpdate, getVersionInfo, initializeVersionFile } from './self-update.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -91,6 +92,33 @@ app.get('/health', async (req, res) => {
   }
 
   res.json(health);
+});
+
+// Version endpoint
+app.get('/version', async (req, res) => {
+  try {
+    const versionInfo = await getVersionInfo();
+    res.json(versionInfo);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Unable to get version info',
+      message: error.message,
+    });
+  }
+});
+
+// Manual update endpoint (for triggering updates without restart)
+app.post('/api/update', async (req, res) => {
+  try {
+    console.log('Manual update triggered via API');
+    const result = await performSelfUpdate({ force: false });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Update failed',
+      message: error.message,
+    });
+  }
 });
 
 // Backend API routes for artwork retrieval
@@ -292,16 +320,56 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`\n🚀 Artorize CDN Server`);
-  console.log(`   Environment: ${ENV}`);
-  console.log(`   Port: ${PORT}`);
-  console.log(`   CORS: ${currentConfig.corsOrigin}`);
-  console.log(`   Cache Max-Age: ${currentConfig.cacheMaxAge}s`);
-  console.log(`   Compression: ${currentConfig.compression ? 'enabled' : 'disabled'}`);
-  console.log(`\n   🌐 http://localhost:${PORT}`);
-  console.log(`   🏥 http://localhost:${PORT}/health\n`);
+// Perform self-update on startup
+async function startServer() {
+  console.log('\n=== Artorize CDN Server Starting ===\n');
+
+  // Initialize version file if it doesn't exist
+  await initializeVersionFile();
+
+  // Perform self-update (check for updates and pull if available)
+  if (process.env.SKIP_AUTO_UPDATE !== 'true') {
+    console.log('Checking for updates...');
+    const updateResult = await performSelfUpdate({ skipBuild: false });
+
+    if (updateResult.updated) {
+      console.log(`✅ Updated to commit ${updateResult.currentCommit.substring(0, 7)}`);
+    } else if (updateResult.error) {
+      console.warn(`⚠️  Update check failed: ${updateResult.error}`);
+      if (updateResult.details) {
+        console.warn(`   Details: ${updateResult.details}`);
+      }
+    } else {
+      console.log('✅ Already up to date');
+    }
+  } else {
+    console.log('⏭️  Auto-update skipped (SKIP_AUTO_UPDATE=true)');
+  }
+
+  // Start server
+  app.listen(PORT, async () => {
+    const versionInfo = await getVersionInfo();
+
+    console.log(`\n🚀 Artorize CDN Server`);
+    console.log(`   Version: ${versionInfo.version}`);
+    console.log(`   Commit: ${versionInfo.gitCommitShort || 'unknown'}`);
+    console.log(`   Branch: ${versionInfo.gitBranch || 'unknown'}`);
+    console.log(`   Last Update: ${versionInfo.lastUpdate ? new Date(versionInfo.lastUpdate).toLocaleString() : 'never'}`);
+    console.log(`   Environment: ${ENV}`);
+    console.log(`   Port: ${PORT}`);
+    console.log(`   CORS: ${currentConfig.corsOrigin}`);
+    console.log(`   Cache Max-Age: ${currentConfig.cacheMaxAge}s`);
+    console.log(`   Compression: ${currentConfig.compression ? 'enabled' : 'disabled'}`);
+    console.log(`\n   🌐 http://localhost:${PORT}`);
+    console.log(`   🏥 http://localhost:${PORT}/health`);
+    console.log(`   📦 http://localhost:${PORT}/version\n`);
+  });
+}
+
+// Start the server
+startServer().catch((error) => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
 });
 
 // Graceful shutdown
