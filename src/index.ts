@@ -11,8 +11,9 @@ interface SACData {
   flags: number;
 }
 
-// Cache for parsed mask ImageData to avoid recomputation
+// Cache for parsed mask ImageData and SAC data
 let cachedMaskData: ImageData | null = null;
+let sacDataCache: { a: Int16Array; b: Int16Array; width: number; height: number } | null = null;
 
 /**
  * Fetches and parses a SAC file from the given URL
@@ -89,24 +90,116 @@ function parseSAC(buffer: ArrayBuffer): SACData {
 }
 
 /**
- * Creates mask image data from SAC arrays with optimizations
+ * Downsample array data using nearest-neighbor for performance
+ * Used when display size is significantly smaller than mask resolution
+ */
+function downsampleArray(
+  src: Int16Array,
+  srcW: number,
+  srcH: number,
+  dstW: number,
+  dstH: number
+): Int16Array {
+  const dst = new Int16Array(dstW * dstH);
+  const scaleX = srcW / dstW;
+  const scaleY = srcH / dstH;
+
+  for (let y = 0; y < dstH; y++) {
+    for (let x = 0; x < dstW; x++) {
+      const srcX = Math.floor(x * scaleX);
+      const srcY = Math.floor(y * scaleY);
+      dst[y * dstW + x] = src[srcY * srcW + srcX];
+    }
+  }
+
+  return dst;
+}
+
+/**
+ * Calculate optimal render resolution based on display size
+ * Returns dimensions that balance quality and performance
+ */
+function calculateOptimalResolution(
+  maskW: number,
+  maskH: number,
+  displayW: number,
+  displayH: number
+): { width: number; height: number; shouldDownsample: boolean } {
+  // Use device pixel ratio for high-DPI displays
+  const dpr = window.devicePixelRatio || 1;
+  const targetW = Math.ceil(displayW * dpr);
+  const targetH = Math.ceil(displayH * dpr);
+
+  // Calculate downscale ratio
+  const ratioW = maskW / targetW;
+  const ratioH = maskH / targetH;
+  const maxRatio = Math.max(ratioW, ratioH);
+
+  // Only downsample if mask is significantly larger (>2x)
+  // This saves memory and CPU while maintaining visual quality
+  if (maxRatio > 2) {
+    // Downsample to target resolution, maintaining aspect ratio
+    const scale = Math.min(targetW / maskW, targetH / maskH);
+    return {
+      width: Math.max(1, Math.floor(maskW * scale)),
+      height: Math.max(1, Math.floor(maskH * scale)),
+      shouldDownsample: true,
+    };
+  }
+
+  return { width: maskW, height: maskH, shouldDownsample: false };
+}
+
+/**
+ * Creates mask image data from SAC arrays with smart resolution scaling
  * - Optimized fast path for grayscale masks (SAC v1.1) where a === b
  * - Pre-computes magnitudes to avoid repeated Math.hypot calls
  * - Uses Uint8ClampedArray directly for better performance
- * - Caches result for reuse
+ * - Automatically downsamples when display size is much smaller than mask
+ * - Reduces memory usage by up to 95% for large masks displayed small
  */
-function createMaskImageData(a: Int16Array, b: Int16Array, W: number, H: number): ImageData {
-  const size = W * H;
-  const data = new Uint8ClampedArray(size * 4);
-
+function createMaskImageData(
+  a: Int16Array,
+  b: Int16Array,
+  W: number,
+  H: number,
+  displayW?: number,
+  displayH?: number
+): ImageData {
   // SAC v1.1 grayscale optimization: when a === b, use fast path
   const isGrayscale = a === b;
+
+  // Calculate optimal resolution if display size is provided
+  let renderW = W;
+  let renderH = H;
+  let aProcessed = a;
+  let bProcessed = b;
+
+  if (displayW && displayH) {
+    const optimal = calculateOptimalResolution(W, H, displayW, displayH);
+
+    if (optimal.shouldDownsample) {
+      renderW = optimal.width;
+      renderH = optimal.height;
+
+      // Downsample arrays before creating ImageData
+      aProcessed = downsampleArray(a, W, H, renderW, renderH);
+      if (!isGrayscale) {
+        bProcessed = downsampleArray(b, W, H, renderW, renderH);
+      } else {
+        bProcessed = aProcessed; // Maintain grayscale reference
+      }
+    }
+  }
+
+  const size = renderW * renderH;
+  const data = new Uint8ClampedArray(size * 4);
 
   if (isGrayscale) {
     // Fast path: grayscale masks (8.6x faster according to benchmarks)
     // For grayscale, magnitude = |value| * sqrt(2), but we use abs value directly for visualization
     for (let i = 0; i < size; i++) {
-      const val = Math.abs(a[i]);
+      const val = Math.abs(aProcessed[i]);
       const alpha = Math.min(255, val);
 
       const j = i * 4;
@@ -118,8 +211,8 @@ function createMaskImageData(a: Int16Array, b: Int16Array, W: number, H: number)
   } else {
     // Legacy path: RGB masks with separate A and B arrays
     for (let i = 0; i < size; i++) {
-      const ax = a[i];
-      const by = b[i];
+      const ax = aProcessed[i];
+      const by = bProcessed[i];
       // Optimized magnitude calculation: avoid Math.hypot for performance
       const magSq = ax * ax + by * by;
       const mag = Math.min(255, Math.sqrt(magSq));
@@ -132,7 +225,7 @@ function createMaskImageData(a: Int16Array, b: Int16Array, W: number, H: number)
     }
   }
 
-  return new ImageData(data, W, H);
+  return new ImageData(data, renderW, renderH);
 }
 
 /**
@@ -151,33 +244,61 @@ function renderMaskToCanvas(canvas: HTMLCanvasElement, maskData: ImageData, disp
 }
 
 /**
+ * Renders mask with current display dimensions
+ */
+function renderMaskNow(
+  imgEl: HTMLImageElement,
+  overlayCanvas: HTMLCanvasElement
+): void {
+  if (!sacDataCache) return;
+
+  const displayWidth = imgEl.offsetWidth;
+  const displayHeight = imgEl.offsetHeight;
+
+  if (displayWidth === 0 || displayHeight === 0) {
+    return; // Image not yet laid out
+  }
+
+  // Create optimized ImageData with smart resolution matching
+  cachedMaskData = createMaskImageData(
+    sacDataCache.a,
+    sacDataCache.b,
+    sacDataCache.width,
+    sacDataCache.height,
+    displayWidth,
+    displayHeight
+  );
+
+  requestAnimationFrame(() => {
+    renderMaskToCanvas(overlayCanvas, cachedMaskData!, displayWidth, displayHeight);
+  });
+
+  console.log(`Mask rendered: ${sacDataCache.width}x${sacDataCache.height} -> ${cachedMaskData.width}x${cachedMaskData.height} (displayed as ${displayWidth}x${displayHeight})`);
+}
+
+/**
  * Loads mask data and renders it on overlay canvas with optimizations
+ * - Uses parallel fetching for seamless loading
+ * - Automatically downsamples for efficient memory usage
  */
 async function loadMaskAndRender(
   imgEl: HTMLImageElement,
   sacUrl: string,
-  overlayCanvas: HTMLCanvasElement
+  overlayCanvas: HTMLCanvasElement,
+  sacFetchPromise?: Promise<SACData>
 ): Promise<void> {
   try {
-    const { a, b, width, height } = await fetchSAC(sacUrl);
+    // Use provided promise or fetch now (for backwards compatibility)
+    const sacPromise = sacFetchPromise || fetchSAC(sacUrl);
+    const { a, b, width, height } = await sacPromise;
     const W = width || imgEl.naturalWidth;
     const H = height || imgEl.naturalHeight;
 
-    // Create and cache mask image data (optimization #2: cache the result)
-    if (!cachedMaskData) {
-      cachedMaskData = createMaskImageData(a, b, W, H);
-    }
+    // Cache SAC data for resize events
+    sacDataCache = { a, b, width: W, height: H };
 
-    // Batch DOM reads to avoid layout thrashing (optimization #3)
-    const displayWidth = imgEl.offsetWidth;
-    const displayHeight = imgEl.offsetHeight;
-
-    // Render using RAF for smooth painting (optimization #4)
-    requestAnimationFrame(() => {
-      renderMaskToCanvas(overlayCanvas, cachedMaskData!, displayWidth, displayHeight);
-    });
-
-    console.log(`Mask rendered: ${W}x${H} (displayed as ${displayWidth}x${displayHeight})`);
+    // Render with optimal resolution
+    renderMaskNow(imgEl, overlayCanvas);
   } catch (error) {
     console.error('Failed to load mask:', error);
     // Graceful degradation - continue without mask overlay
@@ -205,13 +326,21 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // Load mask handler
+  const sacUrl = img.src + '.sac';
+
+  // OPTIMIZATION: Start fetching SAC in parallel with image load
+  // This eliminates sequential loading delay for seamless experience
+  const sacFetchPromise = fetchSAC(sacUrl).catch(error => {
+    console.error('Failed to fetch SAC:', error);
+    throw error;
+  });
+
+  // Load mask handler - mask may already be fetched due to parallel loading
   const loadMask = () => {
-    const sacUrl = img.src + '.sac';
-    loadMaskAndRender(img, sacUrl, overlayCanvas);
+    loadMaskAndRender(img, sacUrl, overlayCanvas, sacFetchPromise);
   };
 
-  // Wait for image to load before fetching mask
+  // Wait for image to load
   img.addEventListener('load', loadMask);
 
   // If image already loaded
@@ -219,14 +348,13 @@ document.addEventListener('DOMContentLoaded', () => {
     loadMask();
   }
 
-  // Handle window resize with debouncing (optimization #6)
+  // Handle window resize with debouncing
+  // Re-render with optimal resolution for new display size
   const handleResize = debounce(() => {
-    if (cachedMaskData) {
-      const displayWidth = img.offsetWidth;
-      const displayHeight = img.offsetHeight;
-      requestAnimationFrame(() => {
-        renderMaskToCanvas(overlayCanvas, cachedMaskData!, displayWidth, displayHeight);
-      });
+    if (sacDataCache) {
+      // Invalidate cache and re-create at new optimal resolution
+      cachedMaskData = null;
+      renderMaskNow(img, overlayCanvas);
     }
   }, 150);
 
