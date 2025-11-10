@@ -1,10 +1,21 @@
 #!/bin/bash
 set -e
 
-# Artorize CDN - One-line Deployment Script
-# Usage: curl -sSL https://raw.githubusercontent.com/Artorize/artorize-cdn/main/scripts/deploy.sh | sudo bash
+# Artorize CDN - One-line Deployment & Update Script
+#
+# Usage:
+#   Initial deployment:
+#     curl -sSL https://raw.githubusercontent.com/Artorize/artorize-cdn/main/scripts/deploy.sh | sudo bash
+#
+#   Update existing installation:
+#     curl -sSL https://raw.githubusercontent.com/Artorize/artorize-cdn/main/scripts/deploy.sh | sudo bash
+#
+# The script automatically detects if this is a new installation or an update.
+#
+# Note: The CDN service also auto-updates on startup by checking GitHub for new commits.
+# This script provides manual deployment/update control when needed.
 
-echo "=== Artorize CDN Deployment Script ==="
+echo "=== Artorize CDN Deployment & Update Script ==="
 echo ""
 
 # Configuration
@@ -84,19 +95,25 @@ else
     info "User ${SERVICE_USER} already exists"
 fi
 
-info "Step 4/7: Cloning/updating repository..."
+info "Step 4/7: Installing/updating repository..."
 
 # Clone or update repository
 if [ -d "$INSTALL_DIR/.git" ]; then
-    info "Repository exists. Pulling latest changes..."
+    info "Existing installation detected. Updating to latest version..."
     cd "$INSTALL_DIR"
+
+    # Fetch and reset to latest main branch
     sudo -u "$SERVICE_USER" git fetch origin
     sudo -u "$SERVICE_USER" git reset --hard origin/main
+
+    info "✅ Updated to latest commit: $(git rev-parse --short HEAD)"
 else
-    info "Cloning repository..."
+    info "New installation. Cloning repository..."
     rm -rf "$INSTALL_DIR"
     sudo -u "$SERVICE_USER" git clone "$REPO_URL" "$INSTALL_DIR"
     cd "$INSTALL_DIR"
+
+    info "✅ Cloned repository at commit: $(git rev-parse --short HEAD)"
 fi
 
 info "Step 5/7: Installing dependencies and building..."

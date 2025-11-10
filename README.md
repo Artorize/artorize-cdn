@@ -159,6 +159,8 @@ This automated deployment script will:
 - ✅ Set up log rotation (14 days retention)
 - ✅ Apply security hardening (restricted permissions, isolated temp)
 
+**Updating**: Re-run the same command to update an existing installation. The script detects and updates automatically.
+
 ### System Service Management
 
 **IMPORTANT**: The CDN **must be registered as a systemd service** for production use. The deployment script handles this automatically.
@@ -264,6 +266,45 @@ sudo lsof -i :3000
 # Change port in config
 sudo nano /opt/artorize-cdn/.env  # Set PORT=3001
 sudo systemctl restart artorize-cdn
+```
+
+### Automatic Updates on Launch
+
+**The CDN automatically checks for updates on startup** and performs a `git pull` if new commits are available. This ensures your deployment stays current without manual intervention.
+
+**How it works**:
+1. Service starts → checks GitHub for new commits
+2. If updates found → pulls latest changes and rebuilds
+3. Updates `version.json` with timestamp and commit hash
+4. Continues normal startup
+
+**Disable auto-update** (not recommended for production):
+```bash
+# Add to /opt/artorize-cdn/.env
+SKIP_AUTO_UPDATE=true
+
+# Restart service
+sudo systemctl restart artorize-cdn
+```
+
+**Manual update** without restart:
+```bash
+# Via API endpoint
+curl -X POST http://localhost:3000/api/update
+
+# Or via npm command
+cd /opt/artorize-cdn
+npm run update
+```
+
+**Check current version**:
+```bash
+# Via API
+curl http://localhost:3000/version
+
+# Or via npm command
+cd /opt/artorize-cdn
+npm run version
 ```
 
 ### Manual Installation
