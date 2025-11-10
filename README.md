@@ -139,6 +139,137 @@ The test page provides:
 - **Stacked Canvas Rendering**: Shows how the mask overlays the image
 - **Interactive Controls**: Adjust opacity and visualization modes
 
+## Production Deployment (Linux/Ubuntu)
+
+### One-Line Deployment
+
+Deploy the CDN server with a single command:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Artorize/artorize-cdn/main/scripts/deploy.sh | sudo bash
+```
+
+This automated deployment script will:
+- ✅ Install Node.js 20+ if not present
+- ✅ Create dedicated service user (`artorize`)
+- ✅ Clone/update repository to `/opt/artorize-cdn`
+- ✅ Install dependencies and build the project
+- ✅ **Register as systemd service** with automatic restart
+- ✅ **Configure comprehensive logging** (access + error logs)
+- ✅ Set up log rotation (14 days retention)
+- ✅ Apply security hardening (restricted permissions, isolated temp)
+
+### System Service Management
+
+**IMPORTANT**: The CDN **must be registered as a systemd service** for production use. The deployment script handles this automatically.
+
+After deployment, manage the service with:
+
+```bash
+# Start/stop/restart service
+sudo systemctl start artorize-cdn
+sudo systemctl stop artorize-cdn
+sudo systemctl restart artorize-cdn
+
+# Check service status
+sudo systemctl status artorize-cdn
+
+# Enable/disable auto-start on boot
+sudo systemctl enable artorize-cdn
+sudo systemctl disable artorize-cdn
+```
+
+### Logging Setup
+
+The service is configured with **proper logging** at multiple levels:
+
+**1. Systemd Journal Logs** (all service output):
+```bash
+# Follow live logs
+sudo journalctl -u artorize-cdn -f
+
+# View recent logs
+sudo journalctl -u artorize-cdn -n 100
+
+# Filter by priority (errors only)
+sudo journalctl -u artorize-cdn -p err
+```
+
+**2. Application-Specific Logs**:
+```bash
+# Access log (HTTP requests)
+tail -f /var/log/artorize-cdn/access.log
+
+# Error log (application errors)
+tail -f /var/log/artorize-cdn/error.log
+```
+
+**3. Log Rotation**: Logs are automatically rotated daily with 14-day retention
+
+### Configuration
+
+Edit the configuration file and restart:
+
+```bash
+# Edit configuration
+sudo nano /opt/artorize-cdn/.env
+
+# Restart to apply changes
+sudo systemctl restart artorize-cdn
+```
+
+**Required Settings**:
+```bash
+NODE_ENV=production
+PORT=3000
+BACKEND_API_URL=http://your-backend-server:3002  # CHANGE THIS
+CORS_ORIGIN=*
+SKIP_AUTO_UPDATE=false
+```
+
+### Health Monitoring
+
+```bash
+# Quick health check
+curl http://localhost:3000/health
+
+# Version information
+curl http://localhost:3000/version
+
+# Full service status
+sudo systemctl status artorize-cdn
+```
+
+### Troubleshooting
+
+**Service won't start?**
+```bash
+# Check detailed error logs
+sudo journalctl -u artorize-cdn -n 50 --no-pager
+
+# Verify configuration
+cat /opt/artorize-cdn/.env
+
+# Test manually (as service user)
+sudo -u artorize bash
+cd /opt/artorize-cdn
+node server/index.js
+```
+
+**Port already in use?**
+```bash
+# Find process using port 3000
+sudo lsof -i :3000
+
+# Change port in config
+sudo nano /opt/artorize-cdn/.env  # Set PORT=3001
+sudo systemctl restart artorize-cdn
+```
+
+### Manual Installation
+
+If you prefer manual setup, see the [systemd service template](config/artorize-cdn.service) and follow the [deployment guide](docs/DEPLOYMENT.md).
+
 ## SAC v1 Protocol
 
 The Simple Array Container (SAC v1) is a minimal binary format for transmitting mask data:
