@@ -110,13 +110,13 @@ if [ -d "$INSTALL_DIR/.git" ]; then
 else
     info "New installation. Cloning repository..."
 
-    # Create installation directory with proper ownership
-    mkdir -p "$INSTALL_DIR"
-    chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
-
-    # Clone repository as service user
-    sudo -u "$SERVICE_USER" git clone "$REPO_URL" "$INSTALL_DIR"
+    # Clone repository as root to avoid parent directory permission issues
+    # Then fix ownership of all files afterward
+    git clone "$REPO_URL" "$INSTALL_DIR"
     cd "$INSTALL_DIR"
+
+    # Set proper ownership recursively for all cloned files
+    chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 
     info "✅ Cloned repository at commit: $(git rev-parse --short HEAD)"
 fi
