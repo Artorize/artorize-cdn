@@ -100,13 +100,39 @@ info "Step 4/7: Installing/updating repository..."
 # Clone or update repository
 if [ -d "$INSTALL_DIR/.git" ]; then
     info "Existing installation detected. Updating to latest version..."
+
+    # Backup .env file if it exists
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        info "Backing up .env file..."
+        cp "$INSTALL_DIR/.env" /tmp/artorize-cdn.env.backup
+    fi
+
+    # Stop service if running
+    if systemctl is-active --quiet artorize-cdn.service; then
+        info "Stopping service..."
+        systemctl stop artorize-cdn.service
+    fi
+
+    # Clear the installation directory
+    info "Clearing installation directory..."
+    rm -rf "$INSTALL_DIR"
+
+    # Clone fresh repository
+    info "Cloning latest version..."
+    git clone "$REPO_URL" "$INSTALL_DIR"
     cd "$INSTALL_DIR"
 
-    # Fetch and reset to latest main branch
-    sudo -u "$SERVICE_USER" git fetch origin
-    sudo -u "$SERVICE_USER" git reset --hard origin/main
+    # Set proper ownership
+    chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 
-    info "✅ Updated to latest commit: $(git rev-parse --short HEAD)"
+    # Restore .env file if it was backed up
+    if [ -f /tmp/artorize-cdn.env.backup ]; then
+        info "Restoring .env file..."
+        mv /tmp/artorize-cdn.env.backup "$INSTALL_DIR/.env"
+        chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/.env"
+    fi
+
+    info "✅ Updated to latest commit: $(sudo -u "$SERVICE_USER" git rev-parse --short HEAD)"
 else
     info "New installation. Cloning repository..."
 
@@ -118,7 +144,7 @@ else
     # Set proper ownership recursively for all cloned files
     chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 
-    info "✅ Cloned repository at commit: $(git rev-parse --short HEAD)"
+    info "✅ Cloned repository at commit: $(sudo -u "$SERVICE_USER" git rev-parse --short HEAD)"
 fi
 
 info "Step 5/7: Installing dependencies and building..."
