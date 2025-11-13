@@ -105,6 +105,7 @@ if [ -d "$INSTALL_DIR/.git" ]; then
     if [ -f "$INSTALL_DIR/.env" ]; then
         info "Backing up .env file..."
         cp "$INSTALL_DIR/.env" /tmp/artorize-cdn.env.backup
+        chmod 600 /tmp/artorize-cdn.env.backup
     fi
 
     # Stop service if running
