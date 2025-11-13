@@ -109,7 +109,12 @@ if [ -d "$INSTALL_DIR/.git" ]; then
     info "✅ Updated to latest commit: $(git rev-parse --short HEAD)"
 else
     info "New installation. Cloning repository..."
-    rm -rf "$INSTALL_DIR"
+
+    # Create installation directory with proper ownership
+    mkdir -p "$INSTALL_DIR"
+    chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
+
+    # Clone repository as service user
     sudo -u "$SERVICE_USER" git clone "$REPO_URL" "$INSTALL_DIR"
     cd "$INSTALL_DIR"
 
